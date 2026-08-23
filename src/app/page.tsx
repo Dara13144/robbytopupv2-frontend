@@ -54,7 +54,7 @@ export default function Home() {
         <div className="relative w-full rounded-2xl overflow-hidden mb-10 shadow-2xl shadow-slate-950/50">
           <Image
             src="/images/daratopup-banner.jpg"
-            alt="DaraTopup - Top Up Game Favorit Tanpa Ribet"
+            alt="ROBBY-TOPUP - Instant Diamond Top-Up & Gaming Credits"
             width={1200}
             height={400}
             className="w-full h-auto object-cover"
@@ -136,12 +136,12 @@ export default function Home() {
                     }}
                   >
                     {/* Game Card image container */}
-                    <div className="relative aspect-square w-full bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-slate-900 mb-3">
-                      <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 group-hover:scale-110 transition-transform duration-500"></div>
+                    <div className="relative aspect-square w-full bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800/80 mb-3 group-hover:border-cyan-500/50 transition-colors shadow-md">
+                      <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/40 to-transparent z-10 pointer-events-none"></div>
                       
-                      {/* Standard game icon */}
-                      <div className="relative z-10 transition-transform duration-300 group-hover:scale-105">
-                        <GameIcon slug={product.slug} className="h-14 w-14" />
+                      {/* Full-bleed game icon / cover */}
+                      <div className="w-full h-full transition-transform duration-500 group-hover:scale-110">
+                        <GameIcon slug={product.slug} className="h-full w-full object-cover rounded-xl" />
                       </div>
 
                       {/* Top Left Corner Country text Label */}
@@ -151,11 +151,11 @@ export default function Home() {
                         </span>
                       )}
 
-                      {/* Top Right cartoon avatar badge (Dicebear) */}
-                      <div className="absolute top-2 right-2 z-20 h-7 w-7 rounded-full overflow-hidden border border-slate-800 bg-slate-950 shadow">
+                      {/* Top Right Luffy avatar badge */}
+                      <div className="absolute top-2 right-2 z-20 h-7 w-7 rounded-full overflow-hidden border border-cyan-400/60 bg-slate-950 shadow-md">
                         <img 
-                          src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${product.slug}`} 
-                          alt="avatar" 
+                          src="/images/robby-avatar.png" 
+                          alt="Luffy Avatar" 
                           className="w-full h-full object-cover" 
                         />
                       </div>

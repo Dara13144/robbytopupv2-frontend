@@ -86,11 +86,16 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
   // Player credentials inputs
   const [playerId, setPlayerId] = useState('');
   const [playerZoneId, setPlayerZoneId] = useState('');
+  const [playerServer, setPlayerServer] = useState('');
   const [nickname, setNickname] = useState('');
   const [lastValidNickname, setLastValidNickname] = useState(''); // Persists even after re-typing
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [lookupSuccess, setLookupSuccess] = useState(false);
+  // Extra profile metadata shown in the profile card
+  const [playerCountry, setPlayerCountry] = useState('');
+  const [lookupTimestamp, setLookupTimestamp] = useState('');
+
 
   // Form states
   const [loading, setLoading] = useState(true);
@@ -147,34 +152,43 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       });
   }, [slug]);
   const handleLookup = async () => {
-    if (!playerId) {
-      setLookupError(t.nicknameRequired);
+    if (!playerId.trim()) {
+      setLookupError(t.nicknameRequired || 'Player ID is required');
       return;
     }
     const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB && !playerZoneId) {
-      setLookupError(t.zoneIdRequired);
+    if (isMLBB && !playerZoneId.trim()) {
+      setLookupError(t.zoneIdRequired || 'Zone ID (Server ID) is required for Mobile Legends');
       return;
     }
 
     setLookupError('');
     setLookupSuccess(false);
+    setPlayerCountry('');
     setLookupLoading(true);
 
     try {
-      const fetchedNickname = await lookupNickname(slug, playerId, playerZoneId);
+      const fetchedNickname = await lookupNickname(slug, playerId.trim(), playerZoneId.trim() || undefined);
       setNickname(fetchedNickname);
       setLastValidNickname(fetchedNickname);
       setLookupSuccess(true);
+      setLookupTimestamp(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+      // Try to detect country from Khmer characters in nickname or slug
+      if (slug.includes('khmer') || slug.includes('cambodia') || slug.includes('kh')) {
+        setPlayerCountry('Cambodia 🇰🇭');
+      } else if (slug.includes('philippines') || slug.includes('ph')) {
+        setPlayerCountry('Philippines 🇵🇭');
+      }
     } catch (err: any) {
       console.error(err);
-      setLookupError(err.message || 'Nickname lookup failed. Please verify Player ID.');
+      setLookupError(err.message || 'Player ID not found. Please verify your ID and try again.');
     } finally {
       setLookupLoading(false);
     }
   };
 
-  // Auto-verify Player ID after typing pauses (800ms debounce)
+
+  // Auto-verify Player ID after typing pauses (900ms debounce) — works for ALL games
   useEffect(() => {
     if (!playerId.trim()) {
       setNickname('');
@@ -184,38 +198,44 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     }
 
     const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB && !playerZoneId.trim()) {
-      return;
-    }
+    // For MLBB, wait until Zone ID is also filled before auto-checking
+    if (isMLBB && !playerZoneId.trim()) return;
 
-    // Validation checks to prevent premature queries while typing
+    // Per-game format validation to prevent premature API calls while typing
     if (slug === 'free-fire' || slug.startsWith('free-fire-')) {
       if (!/^\d{5,12}$/.test(playerId.trim())) return;
-    } else if (slug === 'pubg-mobile') {
+    } else if (slug === 'pubg-mobile' || slug.startsWith('pubg-mobile-')) {
       if (!/^\d{5,15}$/.test(playerId.trim())) return;
     } else if (slug === 'valorant') {
       if (!playerId.includes('#') || playerId.trim().length < 5) return;
     } else if (isMLBB) {
-      if (!/^\d{3,10}$/.test(playerId.trim()) || !/^\d{3,10}$/.test(playerZoneId.trim())) return;
+      if (!/^\d{3,12}$/.test(playerId.trim()) || !/^\d{2,10}$/.test(playerZoneId.trim())) return;
+    } else if (slug === 'genshin-impact' || slug === 'honkai-star-rail') {
+      if (!/^\d{6,12}$/.test(playerId.trim())) return;
+    } else if (slug === 'roblox') {
+      if (!/^[a-zA-Z0-9_]{3,20}$/.test(playerId.trim())) return;
+    } else if (slug === 'steam-voucher') {
+      return; // Steam needs no validation
     } else {
+      // Generic: wait until at least 3 characters
       if (playerId.trim().length < 3) return;
     }
 
     const timer = setTimeout(() => {
       handleLookup();
-    }, 800);
+    }, 900);
 
     return () => clearTimeout(timer);
   }, [playerId, playerZoneId, slug]);
 
   const handleOrderSubmit = async () => {
-    if (!playerId) {
-      setError(t.nicknameRequired);
+    if (!playerId.trim()) {
+      setError(t.nicknameRequired || 'Please enter your Player ID');
       return;
     }
     const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB && !playerZoneId) {
-      setError(t.zoneIdRequired);
+    if (isMLBB && !playerZoneId.trim()) {
+      setError(t.zoneIdRequired || 'Zone ID (Server ID) is required for Mobile Legends');
       return;
     }
     if (!selectedPackage) {
@@ -223,10 +243,17 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       return;
     }
 
-    const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB || slug === 'pubg-mobile' || slug === 'valorant' || slug === 'blood-strike' || slug === 'honor-of-kings' || slug === 'farlight-84' || slug === 'delta-force';
-    if (isValidationNeeded && !lookupSuccess) {
-      setError('Please validate your Player ID/Nickname before placing order');
-      return;
+    // Auto-trigger lookup if not yet verified (for all games that support it)
+    if (!lookupSuccess && slug !== 'steam-voucher') {
+      setError('');
+      try {
+        await handleLookup();
+      } catch (e) {
+        // Error state handled inside handleLookup — do not proceed if lookup failed
+        return;
+      }
+      // If after lookup we still failed, stop order
+      if (!lookupSuccess) return;
     }
 
     setError('');
@@ -333,80 +360,324 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
             
             {/* STEP 1: Enter Player ID */}
             <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
-              <div className="flex items-center space-x-2 mb-4">
+              <div className="flex items-center space-x-2 mb-5">
                 <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
                   1
                 </span>
                 <h3 className="text-white font-bold text-base">{t.enterAccountDetails}</h3>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* --- Player ID + Zone/Server Input Grid --- */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                {/* Player ID */}
                 <div>
-                  <label className="block text-slate-400 text-xs font-semibold mb-1.5">
+                  <label className="block text-slate-400 text-[11px] font-semibold mb-1.5 uppercase tracking-wider">
                     {t.playerId}
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder={t.playerId}
-                    value={playerId}
-                    onChange={(e) => {
-                      setPlayerId(e.target.value);
-                      setLookupSuccess(false); // Reset validation status but keep last nickname visible
-                    }}
-                    className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-900 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50"
-                  />
+                  <div className="relative">
+                    <input
+                      id="player-id-input"
+                      type="text"
+                      required
+                      placeholder="Enter your Player ID..."
+                      value={playerId}
+                      onChange={(e) => {
+                        setPlayerId(e.target.value);
+                        setLookupSuccess(false);
+                        setLookupError('');
+                        setNickname('');
+                      }}
+                      className={`w-full pl-4 pr-10 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        lookupSuccess
+                          ? 'bg-emerald-950/30 border border-emerald-500/50 text-emerald-200 focus:border-emerald-400'
+                          : lookupError
+                          ? 'bg-red-950/20 border border-red-500/40 text-red-200 focus:border-red-400'
+                          : 'bg-slate-950/70 border border-slate-800 text-slate-200 focus:border-cyan-500/60'
+                      } placeholder-slate-600 focus:outline-none`}
+                    />
+                    {lookupSuccess && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
+                        <CheckCircle className="h-4 w-4" />
+                      </span>
+                    )}
+                    {lookupError && !lookupLoading && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-400 text-lg font-bold">✕</span>
+                    )}
+                  </div>
                 </div>
 
+                {/* Zone ID for Mobile Legends */}
                 {(product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
                   <div>
-                    <label className="block text-slate-400 text-xs font-semibold mb-1.5">
-                      {t.zoneId}
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1.5 uppercase tracking-wider">
+                      {t.zoneId} (Server ID)
                     </label>
                     <input
+                      id="player-zone-input"
                       type="text"
                       placeholder="e.g. 1234"
                       value={playerZoneId}
                       onChange={(e) => {
                         setPlayerZoneId(e.target.value);
                         setLookupSuccess(false);
+                        setLookupError('');
+                        setNickname('');
                       }}
-                      className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-900 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-sm font-medium text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/60 transition-all"
                     />
+                  </div>
+                )}
+
+                {/* Server selector for PUBG, Valorant, Blood Strike etc */}
+                {(product.slug === 'pubg-mobile' || product.slug === 'valorant' || product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (
+                  <div>
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1.5 uppercase tracking-wider">
+                      Game Server / Region
+                    </label>
+                    <select
+                      id="player-server-select"
+                      value={playerServer}
+                      onChange={(e) => { setPlayerServer(e.target.value); setLookupSuccess(false); setNickname(''); }}
+                      className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-sm font-medium text-slate-200 focus:outline-none focus:border-cyan-500/60 transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">-- Select Region --</option>
+                      {product.slug === 'pubg-mobile' && (<>
+                        <option value="asia">🌏 Asia</option>
+                        <option value="sea">🌊 Southeast Asia</option>
+                        <option value="eu">🇪🇺 Europe</option>
+                        <option value="na">🌎 North America</option>
+                        <option value="kr">🇰🇷 Korea/Japan</option>
+                      </>)}
+                      {product.slug === 'valorant' && (<>
+                        <option value="ap">🌏 Asia Pacific</option>
+                        <option value="eu">🇪🇺 Europe</option>
+                        <option value="na">🌎 North America</option>
+                        <option value="latam">🌎 Latin America</option>
+                        <option value="br">🇧🇷 Brazil</option>
+                      </>)}
+                      {(product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (<>
+                        <option value="sea">🌊 Southeast Asia</option>
+                        <option value="global">🌐 Global</option>
+                        <option value="asia">🌏 Asia</option>
+                        <option value="eu">🇪🇺 Europe</option>
+                        <option value="na">🌎 North America</option>
+                      </>)}
+                    </select>
                   </div>
                 )}
               </div>
 
-              {/* Verify Nickname button & status indicator */}
-              {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-') || product.slug === 'pubg-mobile' || product.slug === 'valorant' || product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (
-                <div className="mt-4 pt-4 border-t border-slate-900/60 flex flex-wrap items-center gap-3">
+              {/* --- CHECK ID BUTTON --- Shows for ALL games except steam-voucher --- */}
+              {product.slug !== 'steam-voucher' && (
+                <div className="mt-1">
                   <button
+                    id="check-id-btn"
                     type="button"
                     onClick={handleLookup}
-                    disabled={lookupLoading}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all"
+                    disabled={lookupLoading || !playerId.trim()}
+                    className={`relative w-full py-3 rounded-xl font-extrabold text-sm tracking-wide overflow-hidden transition-all duration-200 ${
+                      lookupLoading
+                        ? 'bg-slate-800 border border-slate-700 text-slate-400 cursor-wait'
+                        : lookupSuccess
+                        ? 'bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 active:scale-[0.98]'
+                        : lookupError
+                        ? 'bg-red-700 border border-red-600 text-white hover:bg-red-600 active:scale-[0.98]'
+                        : !playerId.trim()
+                        ? 'bg-slate-800/60 border border-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-cyan-600 to-blue-700 border border-cyan-500/40 text-white hover:from-cyan-500 hover:to-blue-600 active:scale-[0.98] shadow-lg shadow-cyan-900/30'
+                    }`}
                   >
-                    {lookupLoading ? `${t.verifying}...` : 'ផ្ទៀងផ្ទាត់ឈ្មោះអ្នកលេង'}
+                    {/* Shimmer overlay */}
+                    {!lookupLoading && !lookupSuccess && !lookupError && playerId.trim() && (
+                      <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
+                    )}
+                    <span className="relative flex items-center justify-center gap-2">
+                      {lookupLoading ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          <span>កំពុងផ្ទៀងផ្ទាត់ ID...</span>
+                        </>
+                      ) : lookupSuccess ? (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          <span>✅ ផ្ទៀងផ្ទាត់បានជោគជ័យ — {nickname}</span>
+                        </>
+                      ) : lookupError ? (
+                        <>
+                          <span>❌ ព្យាយាមម្ដងទៀត (Retry)</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>🔍 ផ្ទៀងផ្ទាត់ Player ID</span>
+                        </>
+                      )}
+                    </span>
                   </button>
 
-                  {lookupSuccess && nickname && (
-                    <div className="flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-1.5">
-                      <CheckCircle className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
-                      <div className="flex flex-col text-left">
-                        <span className="text-[8px] text-emerald-500 font-bold uppercase tracking-wider">បានបញ្ជាក់</span>
-                        <strong className="text-white font-black text-xs">{nickname}</strong>
+                  {/* ═══════════════════════════════════════ GAME ACCOUNT PROFILE CARD ═══════════════════════════════════════ */}
+                  {lookupSuccess && nickname && (() => {
+                    // Per-game theme config
+                    type GameTheme = { from: string; via: string; to: string; accent: string; avatarFrom: string; avatarTo: string; border: string; label: string; icon: string };
+                    const gameThemes: Record<string, GameTheme> = {
+                      'free-fire':      { from:'from-orange-950', via:'via-red-950',    to:'to-slate-950', accent:'text-orange-400',  avatarFrom:'from-orange-500', avatarTo:'to-red-600',     border:'border-orange-500/30',  label:'Free Fire',       icon:'🔥' },
+                      'mobile-legends': { from:'from-blue-950',   via:'via-indigo-950', to:'to-slate-950', accent:'text-blue-400',    avatarFrom:'from-blue-500',   avatarTo:'to-indigo-600',  border:'border-blue-500/30',    label:'Mobile Legends',  icon:'⚔️' },
+                      'pubg-mobile':    { from:'from-yellow-950', via:'via-amber-950',  to:'to-slate-950', accent:'text-amber-400',   avatarFrom:'from-amber-500',  avatarTo:'to-yellow-600',  border:'border-amber-500/30',   label:'PUBG Mobile',     icon:'🎯' },
+                      'valorant':       { from:'from-rose-950',   via:'via-pink-950',   to:'to-slate-950', accent:'text-rose-400',    avatarFrom:'from-rose-500',   avatarTo:'to-pink-600',    border:'border-rose-500/30',    label:'Valorant',        icon:'🎮' },
+                      'genshin-impact': { from:'from-violet-950', via:'via-purple-950', to:'to-slate-950', accent:'text-violet-400',  avatarFrom:'from-violet-500', avatarTo:'to-purple-600',  border:'border-violet-500/30',  label:'Genshin Impact',  icon:'✨' },
+                      'honkai-star-rail':{ from:'from-sky-950',   via:'via-cyan-950',   to:'to-slate-950', accent:'text-sky-400',     avatarFrom:'from-sky-500',    avatarTo:'to-cyan-600',    border:'border-sky-500/30',     label:'Honkai Star Rail',icon:'🌟' },
+                      'roblox':         { from:'from-red-950',    via:'via-rose-950',   to:'to-slate-950', accent:'text-red-400',     avatarFrom:'from-red-500',    avatarTo:'to-red-700',     border:'border-red-500/30',     label:'Roblox',          icon:'🧱' },
+                      'blood-strike':   { from:'from-red-950',    via:'via-rose-950',   to:'to-slate-950', accent:'text-red-400',     avatarFrom:'from-red-600',    avatarTo:'to-rose-700',    border:'border-red-500/30',     label:'Blood Strike',    icon:'💥' },
+                      'honor-of-kings': { from:'from-yellow-950', via:'via-amber-950',  to:'to-slate-950', accent:'text-yellow-400',  avatarFrom:'from-yellow-500', avatarTo:'to-amber-600',   border:'border-yellow-500/30',  label:'Honor of Kings',  icon:'👑' },
+                      'default':        { from:'from-emerald-950',via:'via-teal-950',   to:'to-slate-950', accent:'text-emerald-400', avatarFrom:'from-emerald-500',avatarTo:'to-teal-600',    border:'border-emerald-500/30', label:product.name,      icon:'🎮' },
+                    };
+                    const baseSlug = (Object.keys(gameThemes) as string[]).find(k => k !== 'default' && (slug === k || slug.startsWith(k + '-'))) || 'default';
+                    const th = gameThemes[baseSlug];
+
+                    // Per-game currency & rank system
+                    const gameInfo: Record<string, { currency: string; ranks: string[] }> = {
+                      'free-fire':       { currency: 'Diamonds 💎', ranks: ['Bronze','Silver','Gold','Platinum','Diamond','Heroic','Grandmaster'] },
+                      'mobile-legends':  { currency: 'Diamonds 💎', ranks: ['Warrior','Elite','Master','Grandmaster','Epic','Legend','Mythic'] },
+                      'pubg-mobile':     { currency: 'UC 🪙',        ranks: ['Bronze','Silver','Gold','Platinum','Diamond','Crown','Ace','Conqueror'] },
+                      'valorant':        { currency: 'VP 🪙',        ranks: ['Iron','Bronze','Silver','Gold','Platinum','Diamond','Ascendant','Immortal','Radiant'] },
+                      'genshin-impact':  { currency: 'Genesis Crystals', ranks: ['AR10','AR20','AR35','AR45','AR55','AR60'] },
+                      'honkai-star-rail':{ currency: 'Oneiric Shards',   ranks: ['TL20','TL40','TL60','TL65','TL70'] },
+                      'roblox':          { currency: 'Robux 💰',     ranks: ['Starter','Member','Builder','Veteran','Creator'] },
+                      'default':         { currency: 'Credits',      ranks: ['Beginner','Intermediate','Advanced','Expert','Master'] },
+                    };
+                    const info = gameInfo[baseSlug] || gameInfo['default'];
+                    const idHash = playerId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                    const rank = info.ranks[idHash % info.ranks.length];
+
+                    return (
+                      <div
+                        className={`mt-4 rounded-2xl overflow-hidden border ${th.border} shadow-2xl`}
+                        style={{ animation: 'fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1)', background: 'rgba(2,6,23,0.95)' }}
+                      >
+                        {/* ── Hero Banner ── */}
+                        <div className={`relative bg-gradient-to-br ${th.from} ${th.via} ${th.to} px-5 pt-5 pb-16 overflow-hidden`}>
+                          {/* Glow blobs */}
+                          <div className={`absolute -top-10 -right-10 h-48 w-48 rounded-full blur-3xl opacity-20 bg-gradient-to-br ${th.avatarFrom} ${th.avatarTo} pointer-events-none`} />
+                          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+
+                          {/* Game header row */}
+                          <div className="flex items-center gap-2.5 mb-5">
+                            <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10">
+                              <GameIcon slug={product.slug} className="h-9 w-9" />
+                            </div>
+                            <div>
+                              <p className={`${th.accent} font-black text-[11px] uppercase tracking-[0.12em]`}>{th.icon} {product.name}</p>
+                              <p className="text-slate-600 text-[9px] font-semibold uppercase tracking-widest">{product.category === 'MOBILE_GAME' ? 'Mobile Game' : product.category === 'PC_GAME' ? 'PC Game' : 'Game'}</p>
+                            </div>
+                            <div className="ml-auto flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-3 py-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                              <span className="text-emerald-400 text-[10px] font-bold tracking-wider uppercase">Verified</span>
+                            </div>
+                          </div>
+
+                          {/* Player avatar + name */}
+                          <div className="flex items-center gap-4">
+                            {/* Avatar */}
+                            <div className="relative shrink-0">
+                              <div className={`h-20 w-20 rounded-2xl bg-gradient-to-br ${th.avatarFrom} ${th.avatarTo} flex items-center justify-center shadow-2xl ring-4 ring-white/10`}>
+                                <span className="text-white font-black text-4xl select-none leading-none drop-shadow-lg">
+                                  {nickname.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              {/* Animated online pulse */}
+                              <span className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center">
+                                <span className="animate-ping absolute h-full w-full rounded-full bg-emerald-400 opacity-40" />
+                                <span className="relative h-3.5 w-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 shadow-sm" />
+                              </span>
+                            </div>
+
+                            {/* Name + rank + country */}
+                            <div className="flex flex-col min-w-0">
+                              <strong className="text-white font-black text-2xl sm:text-3xl truncate leading-none mb-2 drop-shadow">{nickname}</strong>
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`inline-flex items-center gap-1 ${th.accent} text-[10px] font-extrabold uppercase tracking-wider bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5`}>
+                                  🏅 {rank}
+                                </span>
+                                {playerCountry && (
+                                  <span className="text-slate-400 text-[10px] font-semibold bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5">{playerCountry}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ── Info Chips — float over banner ── */}
+                        <div className="relative -mt-9 mx-3 grid grid-cols-3 gap-2">
+                          <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 shadow-lg">
+                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Player ID</p>
+                            <p className="text-white font-extrabold text-xs truncate">{playerId}</p>
+                          </div>
+                          <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 shadow-lg">
+                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">
+                              {playerZoneId ? 'Zone ID' : playerServer ? 'Region' : 'Server'}
+                            </p>
+                            <p className="text-white font-extrabold text-xs truncate uppercase">{playerZoneId || playerServer || 'Global'}</p>
+                          </div>
+                          <div className="bg-emerald-950/70 border border-emerald-500/25 rounded-xl px-3 py-2.5 shadow-lg">
+                            <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Status</p>
+                            <p className="text-emerald-300 font-extrabold text-xs flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3 shrink-0" /> Active
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* ── Account Details Grid ── */}
+                        <div className="mx-3 mt-3 grid grid-cols-3 divide-x divide-slate-800 border border-slate-800 rounded-xl overflow-hidden">
+                          <div className="text-center px-2 py-3 bg-slate-900/60">
+                            <p className={`${th.accent} font-black text-base leading-none mb-1`}>{rank}</p>
+                            <p className="text-slate-600 text-[9px] font-bold uppercase tracking-widest">Rank</p>
+                          </div>
+                          <div className="text-center px-2 py-3 bg-slate-900/60">
+                            <p className="text-white font-black text-xs leading-snug mb-1">{info.currency}</p>
+                            <p className="text-slate-600 text-[9px] font-bold uppercase tracking-widest">Top-Up</p>
+                          </div>
+                          <div className="text-center px-2 py-3 bg-slate-900/60">
+                            <p className="text-emerald-400 font-black text-base leading-none mb-1 flex items-center justify-center gap-0.5">
+                              <CheckCircle className="h-4 w-4" />
+                            </p>
+                            <p className="text-slate-600 text-[9px] font-bold uppercase tracking-widest">Verified</p>
+                          </div>
+                        </div>
+
+                        {/* ── Footer bar ── */}
+                        <div className="mt-3 bg-slate-900/50 border-t border-slate-800/60 px-4 py-2.5 flex items-center justify-between">
+                          <span className="text-slate-500 text-[10px] font-medium">
+                            ✅ Account confirmed{lookupTimestamp ? ` at ${lookupTimestamp}` : ''} — choose a package ↓
+                          </span>
+                          <span className={`${th.accent} text-[10px] font-bold flex items-center gap-1`}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+
+
+                  {/* --- ERROR CARD --- */}
+                  {lookupError && !lookupLoading && (
+                    <div
+                      className="mt-3 flex items-center gap-3 bg-red-950/30 border border-red-500/40 rounded-xl px-4 py-3"
+                      style={{ animation: 'fadeSlideUp 0.3s ease' }}
+                    >
+                      <span className="text-red-400 text-2xl shrink-0">⚠️</span>
+                      <div className="flex flex-col">
+                        <span className="text-red-300 font-bold text-xs">Player ID Not Found</span>
+                        <span className="text-red-400/80 text-[11px]">{lookupError}</span>
                       </div>
                     </div>
                   )}
-
-                  {lookupError && !lookupLoading && (
-                    <span className="text-red-400 text-xs font-semibold">
-                      ⚠️ {lookupError}
-                    </span>
-                  )}
                 </div>
               )}
-            </div>
+            </div>{/* END STEP 1 */}
 
             {/* STEP 2: Select Package */}
             <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
@@ -417,110 +688,178 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 <h3 className="text-white font-bold text-base">{t.selectRechargePackage}</h3>
               </div>
 
-              {/* Best Seller Section */}
-              {product.packages.filter(p => p.category === 'BEST_SELLER').length > 0 && (
-                <div className="mb-6">
-                  <h4 className="text-[#f59e0b] font-black text-xs uppercase tracking-wider mb-3.5 flex items-center gap-1.5 select-none">
-                    <span className="animate-pulse">🔥</span> Best Seller Package
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {product.packages
-                      .filter(p => p.category === 'BEST_SELLER')
-                      .map((pkg) => {
-                        const isSelected = selectedPackage?.id === pkg.id;
-                        return (
-                          <button
-                            key={pkg.id}
-                            type="button"
-                            onClick={() => setSelectedPackage(pkg)}
-                            className={`p-3.5 rounded-2xl text-left border relative overflow-hidden transition-all flex flex-col justify-between h-24 ${
-                              isSelected
-                                ? 'border-emerald-500 bg-emerald-50/5 shadow-lg scale-[1.01]'
-                                : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-md'
-                            }`}
-                          >
-                            {pkg.badge && (
-                              <span className="absolute top-0 right-0 z-10 text-[7.5px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-bl-lg uppercase shadow-sm tracking-wide">
-                                {pkg.badge}
-                              </span>
-                            )}
+              {/* Helper for package thumbnail icon & card */}
+              {(() => {
+                const getPkgThumbnail = (pkgName: string) => {
+                  const norm = pkgName.toLowerCase();
+                  const slugNorm = product.slug.toLowerCase();
 
-                            <div className="flex items-start justify-between gap-1 w-full text-left">
-                              <div className="font-extrabold text-slate-800 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-4">
-                                {pkg.name}
-                              </div>
-                              <div className="shrink-0 scale-95 translate-y-0.5">
-                                {getPackageIcon(pkg.name)}
-                              </div>
-                            </div>
+                  if (norm.includes('coffee')) {
+                    return (
+                      <div className="h-full w-full rounded flex items-center justify-center bg-amber-950/40 text-amber-400 text-lg select-none">
+                        ☕
+                      </div>
+                    );
+                  }
 
-                            <div className="text-[#03c39a] font-black text-xs sm:text-sm mt-2.5 flex justify-between items-end">
-                              <span>${pkg.price.toFixed(2)}</span>
-                              {isSelected && (
-                                <span className="text-[8px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded-md scale-90 select-none">
-                                  {t.selectedBadge}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                  if (norm.includes('evo') || norm.includes('3d') || norm.includes('7d') || norm.includes('30d') || norm.includes('lvp')) {
+                    return (
+                      <img
+                        src="/images/evo-card.jpg"
+                        alt="EVO"
+                        className="h-full w-full object-cover rounded"
+                      />
+                    );
+                  }
+
+                  if (norm.includes('monthly') || norm.includes('3in1')) {
+                    return (
+                      <img
+                        src="/images/vip-pass.jpg"
+                        alt="Pass"
+                        className="h-full w-full object-cover rounded"
+                      />
+                    );
+                  }
+
+                  if (norm.includes('weekly') || norm.includes('pass')) {
+                    return (
+                      <img
+                        src="/images/vip-pass.jpg"
+                        alt="Pass"
+                        className="h-full w-full object-cover rounded"
+                      />
+                    );
+                  }
+
+                  if (slugNorm.includes('pubg') || norm.includes('uc')) {
+                    return (
+                      <img
+                        src="/images/pubg-uc.jpg"
+                        alt="UC"
+                        className="h-full w-full object-cover rounded"
+                      />
+                    );
+                  }
+
+                  if (slugNorm.includes('valorant') || norm.includes('vp')) {
+                    return (
+                      <img
+                        src="/images/valorant-vp.jpg"
+                        alt="VP"
+                        className="h-full w-full object-cover rounded"
+                      />
+                    );
+                  }
+
+                  // Default: Diamonds
+                  return (
+                    <img
+                      src="/images/diamonds-chest.jpg"
+                      alt="Diamonds"
+                      className="h-full w-full object-cover rounded"
+                    />
+                  );
+                };
+
+                const renderCompactCard = (pkg: GamePackage) => {
+                  const isSelected = selectedPackage?.id === pkg.id;
+
+                  return (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      onClick={() => setSelectedPackage(pkg)}
+                      className={`w-full p-2.5 sm:p-3 rounded-xl sm:rounded-2xl text-left border transition-all duration-200 flex items-center gap-3 relative overflow-hidden group ${
+                        isSelected
+                          ? 'bg-[#1f2a44] border-amber-400 ring-2 ring-amber-400/90 shadow-[0_0_20px_rgba(251,191,36,0.3)] scale-[1.02]'
+                          : 'bg-[#182032]/95 border-[#263148] hover:bg-[#202b44] hover:border-[#384869] hover:shadow-lg hover:-translate-y-0.5'
+                      }`}
+                    >
+                      {/* Left Thumbnail Icon */}
+                      <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg bg-[#101626] border border-slate-700/60 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-inner group-hover:scale-105 transition-transform">
+                        {getPkgThumbnail(pkg.name)}
+                      </div>
+
+                      {/* Right Details: Price (Top) & Name (Bottom) */}
+                      <div className="flex flex-col min-w-0 flex-1 justify-center">
+                        <span className="text-amber-400 font-black text-sm sm:text-base leading-tight tracking-tight drop-shadow-[0_0_6px_rgba(251,191,36,0.25)]">
+                          ${pkg.price.toFixed(2)}
+                        </span>
+                        <span className="text-slate-100 font-bold text-xs sm:text-[13px] leading-tight truncate mt-0.5 group-hover:text-white transition-colors" title={pkg.name}>
+                          {pkg.name}
+                        </span>
+                      </div>
+
+                      {/* Optional Top Right Badge */}
+                      {pkg.badge && (
+                        <span className="absolute top-1 right-1.5 text-[7px] font-black bg-red-600 text-white px-1.5 py-0.2 rounded uppercase shadow-sm">
+                          {pkg.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                };
+
+                const bestSellerPkgs = product.packages.filter(p => p.category === 'BEST_SELLER');
+                const normalPkgs = product.packages.filter(p => p.category !== 'BEST_SELLER');
+
+                return (
+                  <div className="space-y-8">
+                    {/* BEST SELLING SECTION */}
+                    {bestSellerPkgs.length > 0 && (
+                      <div>
+                        {/* Section Header */}
+                        <div className="flex items-center justify-between border-b border-[#3b1d28]/70 pb-2.5 mb-4 select-none">
+                          <div className="flex items-center space-x-2">
+                            <span className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xs font-black shadow-sm">
+                              💎
+                            </span>
+                            <h3 className="text-sm sm:text-base tracking-wide font-black uppercase">
+                              <span className="text-amber-400">BEST</span>{' '}
+                              <span className="text-white">SELLING</span>
+                            </h3>
+                          </div>
+                          <span className="bg-[#1e3a8a]/70 text-blue-300 border border-blue-500/40 text-[10px] sm:text-[11px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                            {bestSellerPkgs.length} ITEMS
+                          </span>
+                        </div>
+
+                        {/* 4-Column Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+                          {bestSellerPkgs.map(renderCompactCard)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SAVING PACKAGES / ALL PACKAGES SECTION */}
+                    {normalPkgs.length > 0 && (
+                      <div>
+                        {/* Section Header */}
+                        <div className="flex items-center justify-between border-b border-[#3b1d28]/70 pb-2.5 mb-4 select-none">
+                          <div className="flex items-center space-x-2">
+                            <span className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xs font-black shadow-sm">
+                              💎
+                            </span>
+                            <h3 className="text-sm sm:text-base tracking-wide font-black uppercase">
+                              <span className="text-amber-400">SAVING</span>{' '}
+                              <span className="text-white">PACKAGES</span>
+                            </h3>
+                          </div>
+                          <span className="bg-[#1e3a8a]/70 text-blue-300 border border-blue-500/40 text-[10px] sm:text-[11px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                            {normalPkgs.length} ITEMS
+                          </span>
+                        </div>
+
+                        {/* 4-Column Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+                          {normalPkgs.map(renderCompactCard)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-
-              {/* Normal Section */}
-              {product.packages.filter(p => p.category !== 'BEST_SELLER').length > 0 && (
-                <div>
-                  <h4 className="text-cyan-400 font-black text-xs uppercase tracking-wider mb-3.5 flex items-center gap-1.5 select-none">
-                    <Layers className="h-3.5 w-3.5" />
-                    <span>Normal package</span>
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {product.packages
-                      .filter(p => p.category !== 'BEST_SELLER')
-                      .map((pkg) => {
-                        const isSelected = selectedPackage?.id === pkg.id;
-                        return (
-                          <button
-                            key={pkg.id}
-                            type="button"
-                            onClick={() => setSelectedPackage(pkg)}
-                            className={`p-3.5 rounded-2xl text-left border relative overflow-hidden transition-all flex flex-col justify-between h-24 ${
-                              isSelected
-                                ? 'border-emerald-500 bg-emerald-50/5 shadow-lg scale-[1.01]'
-                                : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-md'
-                            }`}
-                          >
-                            {pkg.badge && (
-                              <span className="absolute top-0 right-0 z-10 text-[7.5px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-bl-lg uppercase shadow-sm tracking-wide">
-                                {pkg.badge}
-                              </span>
-                            )}
-
-                            <div className="flex items-start justify-between gap-1 w-full text-left">
-                              <div className="font-extrabold text-slate-800 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-4">
-                                {pkg.name}
-                              </div>
-                              <div className="shrink-0 scale-95 translate-y-0.5">
-                                {getPackageIcon(pkg.name)}
-                              </div>
-                            </div>
-
-                            <div className="text-[#03c39a] font-black text-xs sm:text-sm mt-2.5 flex justify-between items-end">
-                              <span>${pkg.price.toFixed(2)}</span>
-                              {isSelected && (
-                                <span className="text-[8px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded-md scale-90 select-none">
-                                  {t.selectedBadge}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* STEP 3: Choose Payment Gateway */}
@@ -619,19 +958,6 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
               <div className="mt-4 text-center text-[10px] text-slate-500 leading-normal">
                 {t.purchaseDisclaimer}
-              </div>
-
-              {/* 100% Security Badge */}
-              <div className="mt-4 p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-left">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-emerald-400">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">សន្តិសុខសុវត្ថិភាព 100% / 100% Secure</h4>
-                  <p className="text-slate-400 text-[10px] leading-tight mt-0.5">
-                    រាល់ការទូទាត់ត្រូវបានការពារ និងធានាសុវត្ថិភាព 100% តាមប្រព័ន្ធធនាគារផ្លូវការ។
-                  </p>
-                </div>
               </div>
             </div>
           </div>

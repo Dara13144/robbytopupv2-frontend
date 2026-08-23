@@ -1,8 +1,7 @@
-// The PRODUCTION backend URL is used as fallback.
-// This prevents the "port 5000" error even if NEXT_PUBLIC_API_URL is missing at build time.
-const PRODUCTION_API = 'https://daratopup-backend-1.onrender.com';
+// The default backend URL fallback.
+const PRODUCTION_API = 'https://robbytopup-backend.onrender.com';
 
-// Retrieve the raw backend URL from env, default fallback to production Render URL
+// Retrieve the raw backend URL from env, default fallback to local backend URL
 const rawApiUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
@@ -112,16 +111,63 @@ function getAuthHeaders(token?: string): Record<string, string> {
   return t ? { 'Authorization': `Bearer ${t}` } : {};
 }
 
+import { FALLBACK_PRODUCTS } from './fallbackProducts';
+
 export async function fetchProducts(): Promise<GameProduct[]> {
-  const res = await fetch(`${API_BASE}/products`);
-  if (!res.ok) throw new Error('Failed to fetch products');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/products`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (_) {
+    // If remote connection fails, attempt local backend
+  }
+
+  try {
+    if (API_BASE.includes('onrender.com')) {
+      const localRes = await fetch(`http://localhost:5001/api/products`, { cache: 'no-store' });
+      if (localRes.ok) {
+        const localData = await localRes.json();
+        if (Array.isArray(localData) && localData.length > 0) {
+          return localData;
+        }
+      }
+    }
+  } catch (_) {}
+
+  return FALLBACK_PRODUCTS;
 }
 
 export async function fetchProduct(slug: string): Promise<GameProduct> {
-  const res = await fetch(`${API_BASE}/products/${slug}`);
-  if (!res.ok) throw new Error('Failed to fetch product details');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/products/${slug}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.name) {
+        return data;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (API_BASE.includes('onrender.com')) {
+      const localRes = await fetch(`http://localhost:5001/api/products/${slug}`, { cache: 'no-store' });
+      if (localRes.ok) {
+        const localData = await localRes.json();
+        if (localData && localData.name) {
+          return localData;
+        }
+      }
+    }
+  } catch (_) {}
+
+  const found = FALLBACK_PRODUCTS.find(p => p.slug === slug);
+  if (found) return found;
+
+  throw new Error('Failed to fetch product details');
 }
 
 export async function lookupNickname(

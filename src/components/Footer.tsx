@@ -40,10 +40,43 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Footer Bottom info */}
-        <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500">
-          <p>
-            © {new Date().getFullYear()} 𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋. All rights reserved.
+        {/* Footer Bottom bar matching reference UI */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-900/80">
+          {/* WE ACCEPT Pill Container */}
+          <div className="flex items-center gap-3 bg-[#0a0f1d]/90 border border-slate-800/80 px-4 py-2 rounded-2xl shadow-lg">
+            {/* Green glowing dot + WE ACCEPT */}
+            <div className="flex items-center gap-2 select-none pr-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#10b981] shadow-[0_0_10px_#10b981] animate-pulse shrink-0" />
+              <span className="text-white font-black tracking-wider text-xs uppercase font-sans">
+                WE ACCEPT
+              </span>
+            </div>
+
+            {/* Badges row */}
+            <div className="flex items-center gap-2">
+              {/* ABA MOBILE Pill */}
+              <div className="h-8 px-3 rounded-xl bg-[#0e1726] border border-slate-700/60 flex items-center justify-center shadow-inner hover:border-cyan-500/50 transition-all">
+                <img
+                  src="/images/payments/aba-mobile.svg"
+                  alt="ABA Mobile"
+                  className="h-5 w-auto object-contain rounded-md"
+                />
+              </div>
+
+              {/* KHQR Pill */}
+              <div className="h-8 px-3 rounded-xl bg-[#0e1726] border border-slate-700/60 flex items-center justify-center shadow-inner hover:border-red-500/50 transition-all">
+                <img
+                  src="/images/payments/khqr.svg"
+                  alt="KHQR"
+                  className="h-5 w-auto object-contain rounded-md"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Copyright notice */}
+          <p className="text-slate-400 text-xs font-semibold tracking-wide select-none">
+            © 2026 ROBBY-TOPUP. All rights reserved.
           </p>
         </div>
       </div>

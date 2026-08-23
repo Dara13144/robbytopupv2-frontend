@@ -57,8 +57,8 @@ export default function Header() {
           <Link href="/" className="flex items-center space-x-2.5 group">
             <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-orange-500/60 group-hover:ring-orange-400 transition-all shadow-lg shadow-orange-900/30">
               <Image
-                src="/images/daratopup-avatar.png"
-                alt="DaraTopup"
+                src="/images/robby-avatar.png"
+                alt="ROBBY-TOPUP"
                 width={40}
                 height={40}
                 className="h-full w-full object-cover"
@@ -67,7 +67,7 @@ export default function Header() {
             </div>
             <div className="flex flex-col leading-none">
               <span className="font-black text-lg tracking-tight bg-gradient-to-r from-orange-400 to-cyan-400 bg-clip-text text-transparent">
-                𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋
+                ROBBY-TOPUP
               </span>
               <span className="text-[9px] text-slate-500 font-semibold">
                 • គុណភាព • សុវត្ថិភាព • តម្លៃសមរម្យ

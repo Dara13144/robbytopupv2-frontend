@@ -33,7 +33,7 @@ export default function GameIcon({ slug, className = "h-16 w-16" }: GameIconProp
 
   if (imagePath) {
     return (
-      <div className="relative overflow-hidden border border-slate-800 rounded-xl shadow-lg flex items-center justify-center h-20 w-20 bg-slate-900 transition-all duration-300">
+      <div className={`relative overflow-hidden rounded-xl shadow-lg flex items-center justify-center bg-slate-900 transition-all duration-300 ${className}`}>
         <img
           src={imagePath}
           alt={slug}
