@@ -248,29 +248,70 @@ export async function fetchOrderHistory(emailOrId: string): Promise<OrderStatusD
 
 // Authentication
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Invalid credentials');
+  const endpoints = [
+    `${API_BASE}/auth/login`,
+    'http://localhost:5001/api/auth/login',
+  ];
+
+  let lastError = 'Invalid credentials';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Invalid email or password';
+      if (res.status === 401 || res.status === 400) {
+        // Explicit wrong password/email - don't retry other servers with same wrong credentials
+        throw new Error(lastError);
+      }
+    } catch (e: any) {
+      if (e.message && (e.message.includes('Invalid') || e.message.includes('password') || e.message.includes('email'))) {
+        throw e;
+      }
+      console.warn(`Login failed on ${url}, trying next endpoint...`);
+    }
   }
-  return res.json();
+
+  throw new Error(lastError);
 }
 
 export async function register(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Registration failed');
+  const endpoints = [
+    `${API_BASE}/auth/register`,
+    'http://localhost:5001/api/auth/register',
+  ];
+
+  let lastError = 'Registration failed';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Registration failed';
+      if (res.status === 400) {
+        throw new Error(lastError);
+      }
+    } catch (e: any) {
+      if (e.message && (e.message.includes('already') || e.message.includes('registered'))) {
+        throw e;
+      }
+      console.warn(`Register failed on ${url}, trying next endpoint...`);
+    }
   }
-  return res.json();
+
+  throw new Error(lastError);
 }
 
 export async function getProfile() {
