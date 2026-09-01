@@ -314,6 +314,33 @@ export async function register(email: string, password: string) {
   throw new Error(lastError);
 }
 
+export async function loginWithGoogle(credential: string, email?: string, name?: string) {
+  const endpoints = [
+    `${API_BASE}/auth/google`,
+    'http://localhost:5001/api/auth/google',
+  ];
+
+  let lastError = 'Google login failed';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, email, name }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Google login failed';
+    } catch (e: any) {
+      console.warn(`Google login failed on ${url}, trying next endpoint...`);
+    }
+  }
+
+  throw new Error(lastError);
+}
+
 export async function getProfile() {
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: getAuthHeaders(),
