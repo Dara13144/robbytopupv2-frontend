@@ -105,7 +105,7 @@ export interface OrderStatusDetails {
 }
 
 // Helper to fetch authorization header
-function getAuthHeaders(token?: string): Record<string, string> {
+export function getAuthHeaders(token?: string): Record<string, string> {
   const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
   return t ? { 'Authorization': `Bearer ${t}` } : {};
 }
@@ -363,25 +363,49 @@ export async function simulatePaymentCallback(txnId: string, status: 'PAID' | 'F
   return res.json();
 }
 
+
 // Admin Panel Requests
 export async function fetchAdminStats() {
-  const res = await fetch(`${API_BASE}/admin/stats`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch admin stats');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stats`,
+    'http://localhost:5001/api/admin/stats',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminStats failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch admin stats');
 }
 
 export async function fetchAdminOrders(status?: string, search?: string) {
   const params = new URLSearchParams();
   if (status) params.append('status', status);
   if (search) params.append('search', search);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
 
-  const res = await fetch(`${API_BASE}/admin/orders?${params.toString()}`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch orders');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/orders${queryStr}`,
+    `http://localhost:5001/api/admin/orders${queryStr}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminOrders failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch orders');
 }
 
 export async function updateAdminOrderStatus(id: string, status: string, code?: string) {
@@ -398,40 +422,66 @@ export async function updateAdminOrderStatus(id: string, status: string, code?: 
 }
 
 export async function fetchAdminStock() {
-  const res = await fetch(`${API_BASE}/admin/stock`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch stock list');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stock`,
+    'http://localhost:5001/api/admin/stock',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminStock failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch stock list');
 }
 
 export async function addAdminStock(packageId: string, codes: string) {
-  const res = await fetch(`${API_BASE}/admin/stock`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ packageId, codes }),
-  });
-  if (!res.ok) throw new Error('Failed to add stock codes');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stock`,
+    'http://localhost:5001/api/admin/stock',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ packageId, codes }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to add stock codes');
 }
 
 export async function addAdminProduct(name: string, category: string, image?: string) {
-  const res = await fetch(`${API_BASE}/admin/products`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ name, category, image }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create product');
+  const endpoints = [
+    `${API_BASE}/admin/products`,
+    'http://localhost:5001/api/admin/products',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name, category, image }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to create product');
 }
 
 export async function addAdminPackage(
@@ -442,69 +492,105 @@ export async function addAdminPackage(
   category: string = 'NORMAL',
   badge?: string
 ) {
-  const res = await fetch(`${API_BASE}/admin/products/${productId}/packages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ name, amount, price, category, badge }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create package');
+  const endpoints = [
+    `${API_BASE}/admin/products/${productId}/packages`,
+    `http://localhost:5001/api/admin/products/${productId}/packages`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name, amount, price, category, badge }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to create package');
 }
 
 export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string }) {
-  const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to update product');
+  const endpoints = [
+    `${API_BASE}/admin/products/${id}`,
+    `http://localhost:5001/api/admin/products/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to update product');
 }
 
 export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean }) {
-  const res = await fetch(`${API_BASE}/admin/packages/${id}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to update package');
+  const endpoints = [
+    `${API_BASE}/admin/packages/${id}`,
+    `http://localhost:5001/api/admin/packages/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to update package');
 }
 
 export async function deleteAdminProduct(id: string) {
-  const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to delete product');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/products/${id}`,
+    `http://localhost:5001/api/admin/products/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete product');
 }
 
 export async function deleteAdminPackage(id: string) {
-  const res = await fetch(`${API_BASE}/admin/packages/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to delete package');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/packages/${id}`,
+    `http://localhost:5001/api/admin/packages/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete package');
 }
 
 // Backup and Restore
@@ -525,47 +611,79 @@ export async function downloadAdminBackup() {
 }
 
 export async function createAdminSnapshot() {
-  const res = await fetch(`${API_BASE}/admin/backup/create-snapshot`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create snapshot');
+  const endpoints = [
+    `${API_BASE}/admin/backup/create-snapshot`,
+    'http://localhost:5001/api/admin/backup/create-snapshot',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to create snapshot');
 }
 
 export async function fetchAdminSnapshots() {
-  const res = await fetch(`${API_BASE}/admin/backup/snapshots`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch snapshots');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/backup/snapshots`,
+    'http://localhost:5001/api/admin/backup/snapshots',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminSnapshots failed on ${url}, trying next endpoint...`);
+    }
+  }
+  return { snapshots: [] };
 }
 
 export async function restoreAdminBackup(options: { filename?: string; backupPayload?: any }) {
-  const res = await fetch(`${API_BASE}/admin/backup/restore`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify(options),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to restore backup');
+  const endpoints = [
+    `${API_BASE}/admin/backup/restore`,
+    'http://localhost:5001/api/admin/backup/restore',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(options),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to restore backup');
 }
 
 export async function deleteAdminSnapshot(filename: string) {
-  const res = await fetch(`${API_BASE}/admin/backup/snapshots/${encodeURIComponent(filename)}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to delete snapshot');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/backup/snapshots/${encodeURIComponent(filename)}`,
+    `http://localhost:5001/api/admin/backup/snapshots/${encodeURIComponent(filename)}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete snapshot');
 }
 
